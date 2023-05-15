@@ -2,15 +2,61 @@ import Head from "next/head";
 import { Inter } from "next/font/google";
 import styles from "@/styles/Home.module.css";
 import { useState } from "react";
+import { Bar } from "react-chartjs-2";
+import { Chart, CategoryScale, LinearScale, BarElement } from "chart.js";
 
+Chart.register(CategoryScale, LinearScale, BarElement);
 const inter = Inter({ subsets: ["latin"] });
 
-export default function Home({wordFrequency}) {
+export default function Home({ wordFrequency }) {
   const [viewSubmit, setViewSubmit] = useState(true);
-  const handleSubmit =()=>{
-    console.log(wordFrequency)
-    setViewSubmit(false)
-  }
+  const [histogramData, setHistogramData] = useState([]);
+  const handleSubmit = async () => {
+    const response = await fetch("https://www.terriblytinytales.com/test.txt");
+    const text = await response.text();
+    const words = text.split(/\s+/);
+
+    const wordFrequency = {};
+    for (const word of words) {
+      if (wordFrequency[word]) {
+        wordFrequency[word]++;
+      } else {
+        wordFrequency[word] = 1;
+      }
+    }
+
+    const sortedWords = Object.keys(wordFrequency).sort(
+      (a, b) => wordFrequency[b] - wordFrequency[a]
+    );
+
+    const top20Words = sortedWords.slice(0, 20);
+    const histogramData = top20Words.map((word) => ({
+      word,
+      frequency: wordFrequency[word],
+    }));
+
+    setHistogramData(histogramData);
+    setViewSubmit(false);
+  };
+  const handleExport = () => {
+    const csvContent =
+      "data:text/csv;charset=utf-8," +
+      [
+        ["Word", "Frequency"],
+        ...histogramData.map(({ word, frequency }) => [word, frequency]),
+      ]
+        .map((row) => row.join(","))
+        .join("\n");
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "histogram.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <>
       <Head>
@@ -32,35 +78,72 @@ export default function Home({wordFrequency}) {
             </h1>
           </button>
         )}
+        {!viewSubmit && (
+          <>
+            <div className={styles.card}>
+              <h1 className={inter.className}>Word Frequency Histogram</h1>
+            </div>
+            {(() => {
+              let data = histogramData.map((x) => {
+                return x.frequency;
+              });
+
+              const labels = histogramData.map((x) => {
+                return x.word;
+              });
+
+              const options = {
+                responsive: true,
+                scales: {
+                  x: {
+                    type: "category",
+                    labels: labels,
+                    beginAtZero: true,
+                  },
+                  y: {
+                    beginAtZero: true,
+                  },
+                },
+              };
+
+              const dataset = {
+                label: "Histogram",
+                data: data,
+                backgroundColor: "rgba(0, 123, 255, 0.5)",
+                borderColor: "rgba(0, 123, 255, 1)",
+                borderWidth: 1,
+              };
+
+              const chartData = {
+                datasets: [dataset],
+              };
+              return (
+                <div className="barDiv" style={{ width: "70vw" }}>
+                  <Bar data={chartData} options={options} className="graph" />
+                  <button
+                    className={styles.card}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={handleExport}
+                  >
+                    <h2 className={inter.className}>
+                      Export <span>-&gt;</span>
+                    </h2>
+                  </button>
+                </div>
+              );
+            })()}
+          </>
+        )}
       </main>
     </>
   );
 }
+
 export async function getServerSideProps() {
-  // Fetch the contents of the text file
-  const response = await fetch('https://www.terriblytinytales.com/test.txt');
-  const text = await response.text();
-  console.log(text);
-  // Split the text into an array of words
-  const words = text.split(/\s+/);
-
-  // Create an object to store the frequency of each word
-  const wordFrequency = {};
-
-  // Iterate over the array of words and count the frequency of each word
-  for (const word of words) {
-    if (wordFrequency[word]) {
-      wordFrequency[word]++;
-    } else {
-      wordFrequency[word] = 1;
-    }
-  }
-
-  // Return the result as props
   return {
     props: {
-      wordFrequency,
+      wordFrequency: {},
     },
   };
 }
-
